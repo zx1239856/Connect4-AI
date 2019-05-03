@@ -28,28 +28,30 @@ using namespace std;
 	output:
 		你的落子点Point
 */
-extern "C" __declspec(dllexport) Point* getPoint(const int M, const int N, const int* top, const int* board, 
+_EXPORT Point* getPoint(const int M, const int N, const int* top, const int* board,
 	const int lastX, const int lastY, const int noX, const int noY){
 	int x = -1, y = -1;
 	copyBoardInfo(M, N, top, board, lastX, lastY, noX, noY);
 #ifdef DEBUG_ON
 	AllocConsole();
-	printBoard();
+	//printBoard();
 #endif
 	x = top[0] - 1, y = 0;
 	clock_t start = clock();
-	int r = -1;
-	while (static_cast<size_t>(clock() - start) < static_cast<size_t>(TIME * CLOCKS_PER_SEC) && getNumNode() < MAX_NODE - 500)
+	while (static_cast<size_t>(clock() - start) < static_cast<size_t>(TIME * CLOCKS_PER_SEC) && getNumNode() < MAX_NODE - 300)
 	{
 		MCTMain(2, 0);
 	}
-	r = getResult();
+	int r = getResult();
 	if (r == -1)
 	{
 		r = std::rand() % N;
-		while (top[r] == 0)
+		while (top[r] <= 0)
 			r = std::rand() % N;
 	}
+#ifdef DEBUG_ON
+	_cprintf("Attempt: (%d, %d)\n", top[r] - 1, r);
+#endif
 	return new Point(top[r] - 1, r);
 }
 
@@ -58,7 +60,7 @@ extern "C" __declspec(dllexport) Point* getPoint(const int M, const int N, const
 	getPoint函数返回的Point指针是在本dll模块中声明的，为避免产生堆错误，应在外部调用本dll中的
 	函数来释放空间，而不应该在外部直接delete
 */
-extern "C" __declspec(dllexport) void clearPoint(Point* p){
+_EXPORT void clearPoint(Point* p){
 	delete p;
 	return;
 }

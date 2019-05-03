@@ -7,13 +7,18 @@
 
 #ifndef STRATEGY_H_
 #define	STRATEGY_H_
+#ifndef BUILD_DRIVER
+#define _EXPORT extern "C" __declspec(dllexport)
+#else
+#define _EXPORT
+#endif
 
 #include "Point.h"
 
-extern "C" __declspec(dllexport) Point* getPoint(const int M, const int N, const int* top, const int* _board, 
+_EXPORT Point* getPoint(const int M, const int N, const int* top, const int* _board,
 	const int lastX, const int lastY, const int noX, const int noY);
 
-extern "C" __declspec(dllexport) void clearPoint(Point* p);
+_EXPORT void clearPoint(Point* p);
 
 
 

@@ -6,6 +6,7 @@
 #endif
 
 constexpr size_t MAX_NODE = 5000000;
-constexpr double TIME = 2.3;
+constexpr double TIME = 2.3;  // time limit of MCTS
 constexpr size_t MAX_BOARD_SIZE = 12;
-constexpr double UCT_C = 1.;  // param for score(curr)/visit(curr) + "C" * sqrt(2* ln(visit(parent)) / visit(curr))
+constexpr double UCT_C = .8;  // param for score(curr)/visit(curr) + "C" * sqrt(2* ln(visit(parent)) / visit(curr))
+// the bigger C is, the more exploration will occur, conversely, more conservative and adhere to better results
