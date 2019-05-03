@@ -6,10 +6,11 @@
 #include <tuple>
 
 int num_node = 0; // number of total situations(nodes)
-int tree_node[MAX_NODE][MAX_BOARD_SIZE]; // MCT  nodes, N-ary tree
+int tree_node[MAX_NODE][MAX_BOARD_SIZE]; // MCT nodes, N-ary tree
 int score[MAX_NODE][MAX_BOARD_SIZE]; // scores of the nodes
-int visit_child[MAX_NODE][MAX_BOARD_SIZE]; // visit time of child nodes
-int visit_parent[MAX_NODE]; // visit time of parent nodes
+int visit[MAX_NODE];
+int feasible[MAX_BOARD_SIZE];
+int unvisited_feasible[MAX_BOARD_SIZE];
 
 inline int relu(const int &val)
 {
@@ -83,10 +84,28 @@ inline bool colFull(const int &y)
 	return top[y] == 0;
 }
 
-// find a point either machine or human wins
-int evalBestPoint(const int &player)
+
+constexpr int GAME_WIN = 2;
+constexpr int GAME_TIE = 1;
+constexpr int GAME_CONTINUE = 0;
+
+inline int gameOver(const int &player, int x, int y)
 {
-	auto judger = player == 1 ? userWin : machineWin;
+	auto judge = player == 1 ? userWin : machineWin;
+	if (judge(x, y, M, N, (const int * const)board))
+		return GAME_WIN;
+	else
+	{
+		for (int i = 0; i < N; ++i)
+			if (!colFull(i))
+				return GAME_CONTINUE;
+		return GAME_TIE;
+	}
+}
+
+// find a point either machine or human wins
+inline int evalBestPoint(const int &player)
+{
 	int best = -1;
 	for (int y = 0; y < N; ++y)
 	{
@@ -94,9 +113,9 @@ int evalBestPoint(const int &player)
 		if (x >= 0)
 		{
 			placeChess(y, player);
-			bool win = judger(x, y, M, N, (const int *const)board);
+			int code = gameOver(player, x, y);
 			removeChess(y);
-			if (win)
+			if (code == GAME_WIN)
 			{
 				if (best == -1)
 					best = y;
@@ -130,44 +149,74 @@ void printBoard()
 	_cprintf("===============================================\n");
 }
 
-int treePolicy(const int &curr)
+inline int UCTBestChild(const int &curr, const size_t &feasible_cnt)
 {
-	bool has_unvisited = false;
-	bool all_full = true;
-
-	for (int i = 0; i < N; ++i)
-		if (!colFull(i)) // has unvisited child, randomly pick-up one
-		{
-			all_full = false;
-			if (!visit_child[curr][i])
-			{
-				has_unvisited = true;  break;
-			}
-		}
-
-	if (has_unvisited)
-	{
-		int col = std::rand() % N;
-		while (colFull(col) || visit_child[curr][col]) col = std::rand() % N;
-		return col;
-	}
-
-	if (all_full) // board all full
-		return -1;
-
 	// use UCT to evaluate best child
 	double max_score = -INFINITY;
 	int candidate = -1;
-	for (int i = 0; i < N; ++i)
+	for (size_t i = 0; i < feasible_cnt; ++i)
 	{
-		if (!colFull(i))
-		{
-			double val = static_cast<double>(score[curr][i]) / visit_child[curr][i] + UCT_C * std::sqrt(2 * std::log(visit_parent[curr]) / visit_child[curr][i]);
-			if (val > max_score)
-				max_score = val, candidate = i;
-		}
+		double val = static_cast<double>(score[curr][feasible[i]]) / visit[tree_node[curr][feasible[i]]] + UCT_C * std::sqrt(2 * std::log(visit[curr]) / visit[tree_node[curr][feasible[i]]]);
+		if (val > max_score)
+			max_score = val, candidate = feasible[i];
 	}
 	return candidate;
+}
+
+int treePolicy(int &player, int &curr)
+{
+	while (true)
+	{
+		size_t cnt = 0;
+		int best = evalBestPoint(3 - player);
+		if (best >= 0 && best < N)
+			feasible[0] = best, cnt = 1;
+		best = evalBestPoint(player);
+		if (best >= 0)
+		{
+			best %= N;
+			// prune if player wins
+			if (!tree_node[curr][best])
+				tree_node[curr][best] = num_node++;
+			placeChess(best, player);
+			stack::pushStack(curr, best);
+			return GAME_WIN;
+		}
+		if (!cnt)
+		{
+			for (int i = 0; i < N; ++i)
+				if (!colFull(i))
+					feasible[cnt++] = i;
+		}
+		if (cnt)
+		{
+			size_t unvisited_cnt = 0;
+			for (size_t i = 0; i < cnt; ++i)
+			{
+				if (!tree_node[curr][feasible[i]])
+					unvisited_feasible[unvisited_cnt++] = feasible[i];
+			}
+			if (!unvisited_cnt) // all visited, use UCT to select best
+			{
+				int child = UCTBestChild(curr, cnt);
+				placeChess(child, player);
+				stack::pushStack(curr, child);
+				curr = tree_node[curr][child];
+				player = 3 - player;
+				continue; // continue to play
+			}
+			else // have unvisited child, randomly pick up one
+			{
+				int child = unvisited_feasible[rand() % unvisited_cnt];
+				placeChess(child, player);
+				stack::pushStack(curr, child);
+				tree_node[curr][child] = num_node;
+				curr = num_node++ - 1;
+				return GAME_CONTINUE;
+			}
+		}
+		else return GAME_TIE;
+	}
 }
 
 void copyBoardInfo(const int _M, const int _N, const int * _top, const int * _board, const int _lastX, const int _lastY, const int _noX, const int _noY)
@@ -176,9 +225,9 @@ void copyBoardInfo(const int _M, const int _N, const int * _top, const int * _bo
 	// reset previous
 	for (int i = 0; i < num_node; ++i)
 	{
-		visit_parent[i] = 0;
+		visit[i] = 0;
 		for (int j = 0; j < _N; ++j)
-			score[i][j] = 0, visit_child[i][j] = 0, tree_node[i][j] = 0;
+			score[i][j] = 0, tree_node[i][j] = 0;
 	}
 	num_node = 1; // root node always exists
 	// copy current
@@ -200,60 +249,72 @@ void MCTMain(const int _player, const int _curr)
 	int player = _player, curr = _curr;
 	int winner = 0;
 	
-	while (true)
+	int stat = treePolicy(player, curr);
+	int bonus = 0;
+	int player_tree_node = player;
+
+	constexpr int REWARD = 5;
+
+	// default policy
+	if (stat == GAME_CONTINUE)
 	{
-		int child = treePolicy(curr);
-		if (child == -1)
+		int sim_cnt = 0;
+		while (true)
 		{
-			winner = 0; // tie
-			break;
+			player = 3 - player;
+			++sim_cnt;
+			int f_cnt = 0;
+			for (int i = 0; i < N; ++i)
+				if (!colFull(i))
+					feasible[f_cnt++] = i;
+			if (f_cnt)
+			{
+				int choose = feasible[rand() % f_cnt];
+				int x = top[choose] - 1;
+				placeChess(choose, player);
+				stack::pushStack(-1, choose);
+				stat = gameOver(player, x, choose);
+			}
+			else
+			{
+				winner = 0;
+				break;
+			}
+			if (stat == GAME_TIE)
+			{
+				winner = 0;
+				break;
+			}
+			else if (stat == GAME_WIN)
+			{
+				winner = player;
+				bonus = sim_cnt == 1 ? REWARD : 1;
+				break;
+			}
 		}
-
-		int best = evalBestPoint(3 - player);
-		if (best >= N) // player fail
-		{
-			winner = 3 - player;
-			break;
-		}
-		else if (best > -1)
-		{
-			child = best;
-		}
-		best = evalBestPoint(player);
-		if (best > -1)
-		{
-			child = best % N;
-			score[curr][child] += 1;
-			if (!visit_child[curr][child]) // if visit[curr][child] != 0, we must allocate memory for it to ensure the consistency
-				tree_node[curr][child] = num_node++;
-			++visit_child[curr][child], ++visit_parent[curr];
-			winner = player; // player win
-			break;
-		}
-
-		if (visit_child[curr][child] == 0) // create a new node
-		{
-			tree_node[curr][child] = num_node++;
-		}
-		placeChess(child, player);
-		stack::pushStack(curr, child);
-		player = 3 - player, curr = tree_node[curr][child];
 	}
-	int step = stack::stackSize();
+	else if (stat == GAME_WIN)
+		winner = player_tree_node, bonus = REWARD;
+	player = player_tree_node;
+	// backup
 	while (stack::stackSize())
 	{
-		player = 3 - player;
 		auto parent = stack::popStack();
 		removeChess(parent.second);
+		if (parent.first == -1)
+			continue;
 		if (winner == player)
 		{
 			score[parent.first][parent.second] += 1;
 		}
 		else if (winner == 3 - player)
 		{
-			//score[parent.first][parent.second] -= step < 3 ? 1 : 0;  // quick death
+			//score[parent.first][parent.second] -= bonus;
 		}
-		++visit_child[parent.first][parent.second], ++visit_parent[parent.first];
+		if (bonus > 0)
+			--bonus;
+		player = 3 - player;
+		++visit[parent.first], ++visit[tree_node[parent.first][parent.second]];
 	}
 }
 
@@ -266,9 +327,11 @@ int getResult()
 #endif
 	for (int i = 0; i < N; ++i)
 	{
-		double s = static_cast<double>(score[0][i]) / max(1, visit_child[0][i]);
+		if (!tree_node[0][i])
+			continue;
+		double s = static_cast<double>(score[0][i]) / visit[tree_node[0][i]];
 #ifdef DEBUG_ON
-		_cprintf("%.3f\t", s);
+		_cprintf("%.4f\t", s);
 #endif
 		if (s > max_score && !colFull(i))
 			max_score = s, best = i;
