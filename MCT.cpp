@@ -264,9 +264,18 @@ void MCTMain(const int _player, const int _curr)
 			player = 3 - player;
 			++sim_cnt;
 			int f_cnt = 0;
-			for (int i = 0; i < N; ++i)
-				if (!colFull(i))
-					feasible[f_cnt++] = i;
+			int best = evalBestPoint(3 - player);
+			if (best >= 0 && best < N)
+				feasible[0] = best, f_cnt = 1;
+			best = evalBestPoint(player);
+			if (best >= 0)
+				feasible[0] = best % N, f_cnt = 1;
+			if (!f_cnt)
+			{
+				for (int i = 0; i < N; ++i)
+					if (!colFull(i))
+						feasible[f_cnt++] = i;
+			}
 			if (f_cnt)
 			{
 				int choose = feasible[rand() % f_cnt];
@@ -305,11 +314,11 @@ void MCTMain(const int _player, const int _curr)
 			continue;
 		if (winner == player)
 		{
-			score[parent.first][parent.second] += 1;
+			score[parent.first][parent.second] += (1 + bonus);
 		}
 		else if (winner == 3 - player)
 		{
-			//score[parent.first][parent.second] -= bonus;
+			score[parent.first][parent.second] -= relu(bonus - 1);
 		}
 		if (bonus > 0)
 			--bonus;
